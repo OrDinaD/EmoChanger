@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QComboBox, QFileDialog, QMessageBox,
                              QProgressBar, QSpinBox, QDoubleSpinBox, QDialog)
-from PyQt6.QtCore import Qt, QMimeData, QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QMimeData, QThread, pyqtSignal, QTimer, QMetaObject, Q_ARG
+from PyQt6 import QtCore
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 import os
 import torch
@@ -13,9 +14,13 @@ from ..utils.logger import setup_logger, create_error_report
 from torch.utils.data import random_split, DataLoader
 from ..configs.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT, NUM_EMOTIONS, EMOTION_LABELS,
-    SAMPLE_RATE, CHUNK_SIZE, MODELS_DIR
+    SAMPLE_RATE, CHUNK_SIZE, MODELS_DIR, EMOTIONS, SHOW_PROGRESS,
+    AUTO_SAVE, AUTO_SAVE_INTERVAL, RAW_DATA_DIR, PROCESSED_DATA_DIR,
+    DATA_DIR, MAX_AUDIO_LENGTH, BATCH_SIZE, VALIDATION_SPLIT, NUM_EPOCHS, LEARNING_RATE
 )
 from .settings_window import SettingsWindow
+import threading
+import time
 
 # Инициализируем логгер
 logger = setup_logger()
@@ -64,6 +69,7 @@ class MainWindow(QMainWindow):
         self.audio_processor = AudioProcessor()
         self.current_audio = None
         self.current_audio_path = None
+        self.recording_thread = None
         
         # Таймер для автосохранения
         self.auto_save_timer = QTimer()
@@ -159,20 +165,53 @@ class MainWindow(QMainWindow):
         logger.info("Главное окно успешно инициализировано")
         
     def apply_theme(self):
-        """Применяет выбранную тему к окну"""
+        """Применяет базовый стиль к окну"""
         try:
-            logger.debug(f"Применение темы: {THEME}")
-            if THEME == "Светлая":
-                self.setStyleSheet(LIGHT_THEME)
-            elif THEME == "Темная":
-                self.setStyleSheet(DARK_THEME)
-            else:
-                self.setStyleSheet(PURPLE_THEME)
-            logger.debug("Тема успешно применена")
+            logger.debug(f"Применение базового стиля")
+            # Применяем простой стиль без ссылки на темы
+            self.setStyleSheet("""
+                QMainWindow, QDialog {
+                    background-color: #f5f5f5;
+                    color: #333333;
+                }
+                
+                QPushButton {
+                    background-color: #e0e0e0;
+                    color: #333333;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                    min-height: 20px;
+                }
+                
+                QPushButton:hover {
+                    background-color: #d0d0d0;
+                }
+                
+                QComboBox, QSpinBox, QDoubleSpinBox {
+                    background-color: #ffffff;
+                    color: #333333;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                    padding: 3px;
+                    min-height: 20px;
+                }
+                
+                QProgressBar {
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                    text-align: center;
+                }
+                
+                QProgressBar::chunk {
+                    background-color: #6B4EAE;
+                }
+            """)
+            logger.debug("Базовый стиль успешно применен")
         except Exception as e:
-            error_report = create_error_report(e, "Ошибка при применении темы")
-            logger.error(f"Ошибка при применении темы: {str(e)}")
-            QMessageBox.warning(self, "Ошибка", f"Ошибка при применении темы: {str(e)}")
+            error_report = create_error_report(e, "Ошибка при применении стиля")
+            logger.error(f"Ошибка при применении стиля: {str(e)}")
+            # Не показываем диалог ошибки, чтобы не мешать пользователю
         
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -329,25 +368,112 @@ class MainWindow(QMainWindow):
             self.handle_audio_file(file_path)
             
     def record_audio(self):
+        """Запись аудио с микрофона"""
         try:
+            if hasattr(self, 'recording_thread') and self.recording_thread.is_alive():
+                logger.warning("Запись уже идет, останавливаем...")
+                self.audio_processor.stop_recording()
+                self.recording_thread.join(timeout=2)
+                self.statusBar().showMessage("Запись остановлена")
+                return
+                
             logger.info("Начало записи аудио")
-            self.current_audio = self.audio_processor.record_audio(duration=MAX_AUDIO_LENGTH)
-            self.current_audio_path = os.path.join(PROCESSED_DATA_DIR, "recorded_audio.wav")
-            self.audio_processor.save_audio(self.current_audio, self.current_audio_path)
-            self.statusBar().showMessage("Аудио записано")
             
-            if self.model is not None:
-                # Определяем текущую эмоцию
-                emotion_idx, probs = self.model.predict_emotion(self.current_audio)
-                emotion = list(EMOTIONS.keys())[emotion_idx]
-                self.statusBar().showMessage(f"Текущая эмоция: {emotion}")
-            logger.info("Аудио успешно записано")
+            # Изменяем внешний вид кнопки записи
+            self.record_button.setText("Остановить запись")
+            self.record_button.setStyleSheet("background-color: #ff0000; color: white;")
+            self.statusBar().showMessage("Идет запись...")
+            
+            # Создаем и запускаем поток для записи
+            def record_thread_func():
+                try:
+                    # Записываем аудио
+                    self.current_audio = self.audio_processor.record_audio(duration=MAX_AUDIO_LENGTH)
+                    # Сохраняем в файл
+                    self.current_audio_path = os.path.join(PROCESSED_DATA_DIR, "recorded_audio.wav")
+                    self.audio_processor.save_audio(self.current_audio, self.current_audio_path)
+                    # Обновляем UI
+                    self.update_recording_ui_completed()
+                except Exception as e:
+                    logger.error(f"Ошибка при записи аудио: {str(e)}")
+                    # Обновляем UI в случае ошибки
+                    self.update_recording_ui_error(str(e))
+            
+            self.recording_thread = threading.Thread(target=record_thread_func)
+            self.recording_thread.daemon = True
+            self.recording_thread.start()
+            
         except Exception as e:
             error_report = create_error_report(e, "Ошибка при записи аудио")
             logger.error(f"Ошибка при записи аудио: {str(e)}")
             QMessageBox.warning(self, "Ошибка", f"Ошибка при записи аудио: {str(e)}")
+            self.update_recording_ui_error(str(e))
+            
+    def update_recording_ui_completed(self):
+        """Обновляет UI после успешной записи"""
+        # Вызывается из потока записи, нужно использовать сигналы
+        # или QtCore.QMetaObject.invokeMethod для обновления UI
+        def update():
+            self.record_button.setText("Запись аудио с микрофона")
+            self.record_button.setStyleSheet("")
+            self.statusBar().showMessage("Аудио записано")
+            
+            if self.model is not None:
+                # Определяем текущую эмоцию
+                try:
+                    emotion_idx, probs = self.model.predict_emotion(self.current_audio)
+                    emotion = list(EMOTIONS.keys())[emotion_idx]
+                    self.statusBar().showMessage(f"Текущая эмоция: {emotion}")
+                except Exception as e:
+                    logger.error(f"Ошибка при определении эмоции: {str(e)}")
+                    self.statusBar().showMessage("Аудио записано, но ошибка при определении эмоции")
+                    
+            logger.info("Аудио успешно записано")
+            
+        # Используем invokeMethod для обновления UI из другого потока
+        QMetaObject.invokeMethod(self, "update_recording_ui_completed_slot", 
+                                      Qt.ConnectionType.QueuedConnection)
+    
+    @Qt.pyqtSlot()
+    def update_recording_ui_completed_slot(self):
+        """Слот для обновления UI после записи"""
+        self.record_button.setText("Запись аудио с микрофона")
+        self.record_button.setStyleSheet("")
+        self.statusBar().showMessage("Аудио записано")
+        
+        if self.model is not None:
+            # Определяем текущую эмоцию
+            try:
+                emotion_idx, probs = self.model.predict_emotion(self.current_audio)
+                emotion = list(EMOTIONS.keys())[emotion_idx]
+                self.statusBar().showMessage(f"Текущая эмоция: {emotion}")
+            except Exception as e:
+                logger.error(f"Ошибка при определении эмоции: {str(e)}")
+                self.statusBar().showMessage("Аудио записано, но ошибка при определении эмоции")
+                
+        logger.info("Аудио успешно записано")
+            
+    def update_recording_ui_error(self, error_msg):
+        """Обновляет UI в случае ошибки при записи"""
+        def update():
+            self.record_button.setText("Запись аудио с микрофона")
+            self.record_button.setStyleSheet("")
+            self.statusBar().showMessage(f"Ошибка при записи: {error_msg}")
+            
+        # Используем invokeMethod для обновления UI из другого потока
+        QMetaObject.invokeMethod(self, "update_recording_ui_error_slot",
+                                      Qt.ConnectionType.QueuedConnection,
+                                      Q_ARG(str, error_msg))
+    
+    @Qt.pyqtSlot(str)
+    def update_recording_ui_error_slot(self, error_msg):
+        """Слот для обновления UI при ошибке записи"""
+        self.record_button.setText("Запись аудио с микрофона")
+        self.record_button.setStyleSheet("")
+        self.statusBar().showMessage(f"Ошибка при записи: {error_msg}")
         
     def process_audio(self):
+        """Обработка аудио: изменение эмоции"""
         if self.model is None:
             logger.warning("Попытка обработки аудио без загруженной модели")
             QMessageBox.warning(self, "Ошибка", "Сначала выберите или обучите модель")
@@ -360,24 +486,79 @@ class MainWindow(QMainWindow):
             
         try:
             logger.info("Начало обработки аудио")
+            self.statusBar().showMessage("Идет обработка аудио...")
+            self.process_button.setEnabled(False)
+            
             # Получаем выбранную эмоцию
             target_emotion = self.emotion_combo.currentText()
+            if target_emotion not in EMOTIONS:
+                logger.error(f"Неизвестная эмоция: {target_emotion}")
+                QMessageBox.warning(self, "Ошибка", f"Неизвестная эмоция: {target_emotion}")
+                self.process_button.setEnabled(True)
+                return
+                
             target_emotion_idx = EMOTIONS[target_emotion]
+            logger.info(f"Целевая эмоция: {target_emotion} (индекс: {target_emotion_idx})")
             
-            # Изменяем эмоцию
-            modified_audio = self.model.change_emotion(self.current_audio, target_emotion_idx)
+            # Создаем и запускаем поток для обработки
+            def process_thread_func():
+                try:
+                    # Изменяем эмоцию
+                    modified_audio = self.model.change_emotion(self.current_audio, target_emotion_idx)
+                    
+                    # Сохраняем результат
+                    if self.current_audio_path:
+                        filename = os.path.basename(self.current_audio_path)
+                        output_path = os.path.join(PROCESSED_DATA_DIR, f"modified_{filename}")
+                    else:
+                        output_path = os.path.join(PROCESSED_DATA_DIR, "modified_audio.wav")
+                        
+                    self.audio_processor.save_audio(modified_audio, output_path)
+                    
+                    # Обновляем UI
+                    self.update_processing_ui_completed(output_path)
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке аудио: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    self.update_processing_ui_error(str(e))
             
-            # Сохраняем результат
-            output_path = os.path.join(PROCESSED_DATA_DIR, f"modified_{os.path.basename(self.current_audio_path)}")
-            self.audio_processor.save_audio(modified_audio, output_path)
+            processing_thread = threading.Thread(target=process_thread_func)
+            processing_thread.daemon = True
+            processing_thread.start()
             
-            self.statusBar().showMessage(f"Аудио обработано и сохранено: {output_path}")
-            logger.info(f"Аудио успешно обработано и сохранено: {output_path}")
-            QMessageBox.information(self, "Успех", "Аудио успешно обработано")
         except Exception as e:
             error_report = create_error_report(e, "Ошибка при обработке аудио")
             logger.error(f"Ошибка при обработке аудио: {str(e)}")
+            logger.error(traceback.format_exc())
             QMessageBox.warning(self, "Ошибка", f"Ошибка при обработке аудио: {str(e)}")
+            self.process_button.setEnabled(True)
+            
+    def update_processing_ui_completed(self, output_path):
+        """Обновляет UI после успешной обработки"""
+        QtCore.QMetaObject.invokeMethod(self, "update_processing_ui_completed_slot", 
+                                      Qt.ConnectionType.QueuedConnection,
+                                      QtCore.Q_ARG(str, output_path))
+    
+    @QtCore.pyqtSlot(str)
+    def update_processing_ui_completed_slot(self, output_path):
+        """Слот для обновления UI после обработки"""
+        self.process_button.setEnabled(True)
+        self.statusBar().showMessage(f"Аудио обработано и сохранено")
+        logger.info(f"Аудио успешно обработано и сохранено: {output_path}")
+        QMessageBox.information(self, "Успех", f"Аудио успешно обработано и сохранено:\n{output_path}")
+        
+    def update_processing_ui_error(self, error_msg):
+        """Обновляет UI в случае ошибки при обработке"""
+        QtCore.QMetaObject.invokeMethod(self, "update_processing_ui_error_slot",
+                                      Qt.ConnectionType.QueuedConnection,
+                                      QtCore.Q_ARG(str, error_msg))
+    
+    @QtCore.pyqtSlot(str)
+    def update_processing_ui_error_slot(self, error_msg):
+        """Слот для обновления UI при ошибке обработки"""
+        self.process_button.setEnabled(True)
+        self.statusBar().showMessage(f"Ошибка при обработке: {error_msg}")
+        QMessageBox.warning(self, "Ошибка", f"Ошибка при обработке аудио: {error_msg}")
             
     def auto_save_model(self):
         """Автосохранение модели"""

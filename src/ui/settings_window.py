@@ -5,14 +5,22 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 import os
-import subprocess
-import sys
 import traceback
-from configs.config import *
+import logging
+from ..configs.config import (
+    SAMPLE_RATE, MAX_AUDIO_LENGTH, N_FFT, HOP_LENGTH, N_MELS,
+    BATCH_SIZE, NUM_EPOCHS, LEARNING_RATE, VALIDATION_SPLIT,
+    WINDOW_WIDTH, WINDOW_HEIGHT, SHOW_PROGRESS, AUTO_SAVE
+)
 from ..utils.logger import setup_logger, create_error_report
 
 # Инициализируем логгер
-logger = setup_logger()
+logger = logging.getLogger(__name__)
+
+def save_settings():
+    """Сохраняет настройки в памяти (глобальные переменные)"""
+    logger.info("Настройки сохранены в памяти")
+    return True
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
@@ -126,12 +134,6 @@ class SettingsWindow(QDialog):
         self.window_height_spin.setSingleStep(100)
         ui_layout.addRow("Высота окна:", self.window_height_spin)
         
-        # Тема
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Светлая", "Темная", "Фиолетовая"])
-        self.theme_combo.setCurrentText(THEME)
-        ui_layout.addRow("Тема:", self.theme_combo)
-        
         # Дополнительные настройки
         self.show_progress = QCheckBox("Показывать прогресс-бар")
         self.show_progress.setChecked(SHOW_PROGRESS)
@@ -143,22 +145,6 @@ class SettingsWindow(QDialog):
         
         ui_group.setLayout(ui_layout)
         main_layout.addWidget(ui_group)
-        
-        # Группа экспорта
-        export_group = QGroupBox("Экспорт приложения")
-        export_layout = QVBoxLayout()
-        
-        # Кнопка создания .exe
-        self.create_exe_button = QPushButton("Создать .exe файл")
-        self.create_exe_button.clicked.connect(self.create_exe)
-        export_layout.addWidget(self.create_exe_button)
-        
-        # Статус создания .exe
-        self.exe_status = QLabel("")
-        export_layout.addWidget(self.exe_status)
-        
-        export_group.setLayout(export_layout)
-        main_layout.addWidget(export_group)
         
         # Кнопки
         button_layout = QHBoxLayout()
@@ -195,20 +181,18 @@ class SettingsWindow(QDialog):
             VALIDATION_SPLIT = self.val_split_spin.value()
             
             # Сохраняем настройки интерфейса
-            global WINDOW_WIDTH, WINDOW_HEIGHT, THEME, SHOW_PROGRESS, AUTO_SAVE
+            global WINDOW_WIDTH, WINDOW_HEIGHT, SHOW_PROGRESS, AUTO_SAVE
             WINDOW_WIDTH = self.window_width_spin.value()
             WINDOW_HEIGHT = self.window_height_spin.value()
-            THEME = self.theme_combo.currentText()
             SHOW_PROGRESS = self.show_progress.isChecked()
             AUTO_SAVE = self.auto_save.isChecked()
             
-            # Сохраняем настройки в файл
+            # Сохраняем настройки в памяти
             save_settings()
             
             # Применяем изменения к главному окну
             if self.parent():
                 self.parent().resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-                self.parent().setStyleSheet(STYLE_SHEET)
                 
             logger.info("Настройки успешно сохранены")
             self.accept()
@@ -216,142 +200,5 @@ class SettingsWindow(QDialog):
         except Exception as e:
             error_report = create_error_report(e, "Ошибка при сохранении настроек")
             logger.error(f"Ошибка при сохранении настроек: {str(e)}")
-            QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении настроек: {str(e)}")
-        
-    def create_exe(self):
-        """Создание .exe файла"""
-        try:
-            logger.info("Начало создания .exe файла")
-            
-            # Проверяем и устанавливаем необходимые зависимости
-            required_packages = ['pyinstaller', 'torch', 'torchaudio', 'numpy', 'sounddevice', 'transformers']
-            for package in required_packages:
-                try:
-                    __import__(package)
-                    logger.debug(f"{package} уже установлен")
-                except ImportError:
-                    logger.info(f"Установка {package}...")
-                    self.exe_status.setText(f"Установка {package}...")
-                    subprocess.check_call([sys.executable, "-m", "pip", "install", package], 
-                                       capture_output=True, text=True)
-                    logger.info(f"{package} успешно установлен")
-            
-            # Выбираем путь для сохранения .exe
-            exe_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Сохранить .exe файл",
-                os.path.join(os.path.expanduser("~"), "Desktop", "EmoChanger.exe"),
-                "Executable Files (*.exe)"
-            )
-            
-            if exe_path:
-                self.exe_status.setText("Создание .exe файла...")
-                self.create_exe_button.setEnabled(False)
-                
-                # Создаем spec файл
-                spec_file = os.path.join(BASE_DIR, "EmoChanger.spec")
-                icon_path = os.path.join(os.path.dirname(__file__), "logo.png")
-                
-                with open(spec_file, 'w', encoding='utf-8') as f:
-                    f.write(f'''# -*- mode: python ; coding: utf-8 -*-
-
-block_cipher = None
-
-a = Analysis(
-    ['{os.path.join(BASE_DIR, "src", "main.py")}'],
-    pathex=['{BASE_DIR}'],
-    binaries=[],
-    datas=[
-        ('{os.path.join(BASE_DIR, "data")}', 'data'),
-        ('{icon_path}', '.'),
-        ('{os.path.join(BASE_DIR, "configs")}', 'configs'),
-        ('{os.path.join(BASE_DIR, "src")}', 'src'),
-    ],
-    hiddenimports=[
-        'torch',
-        'torchaudio',
-        'numpy',
-        'sounddevice',
-        'PyQt6',
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
-        'configs.config',
-        'src.models.wav2vec2_model',
-        'src.preprocessing.audio_processor',
-        'src.utils.dataset',
-        'src.utils.logger',
-    ],
-    hookspath=[],
-    hooksconfig={{}},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='EmoChanger',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='{icon_path}'
-)
-''')
-                
-                # Создаем .exe файл
-                logger.info("Запуск PyInstaller...")
-                try:
-                    subprocess.check_call([
-                        sys.executable,
-                        "-m",
-                        "PyInstaller",
-                        "--clean",
-                        "--noconfirm",
-                        spec_file
-                    ], capture_output=True, text=True)
-                except subprocess.CalledProcessError as e:
-                    error_msg = f"Ошибка PyInstaller: {e.stderr}"
-                    logger.error(error_msg)
-                    self.exe_status.setText(error_msg)
-                    raise
-                
-                # Перемещаем .exe файл в выбранное место
-                dist_path = os.path.join(BASE_DIR, "dist", "EmoChanger.exe")
-                if os.path.exists(dist_path):
-                    if os.path.exists(exe_path):
-                        os.remove(exe_path)
-                    os.rename(dist_path, exe_path)
-                    self.exe_status.setText("Файл .exe успешно создан!")
-                    logger.info(f".exe файл успешно создан: {exe_path}")
-                else:
-                    error_msg = "Ошибка: файл .exe не найден"
-                    logger.error(error_msg)
-                    self.exe_status.setText(error_msg)
-                    
-        except Exception as e:
-            error_report = create_error_report(e, "Ошибка при создании .exe файла")
-            error_msg = f"Ошибка: {str(e)}"
-            logger.error(error_msg)
-            self.exe_status.setText(error_msg)
-        finally:
-            self.create_exe_button.setEnabled(True) 
+            logger.error(traceback.format_exc())
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении настроек: {str(e)}") 

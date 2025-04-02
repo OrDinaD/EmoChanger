@@ -1,1 +1,6 @@
-
+filename,emotion
+sample1.wav,neutral
+sample2.wav,happy
+sample3.wav,sad
+sample4.wav,angry
+sample5.wav,fear
