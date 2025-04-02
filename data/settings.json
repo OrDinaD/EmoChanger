@@ -1,0 +1,17 @@
+{
+    "SAMPLE_RATE": 16000,
+    "MAX_AUDIO_LENGTH": 10,
+    "BATCH_SIZE": 8,
+    "NUM_EPOCHS": 10,
+    "LEARNING_RATE": 0.0001,
+    "N_FFT": 2048,
+    "HOP_LENGTH": 512,
+    "WIN_LENGTH": 2048,
+    "N_MELS": 80,
+    "VALIDATION_SPLIT": 0.2,
+    "WINDOW_WIDTH": 800,
+    "WINDOW_HEIGHT": 600,
+    "THEME": "\u0421\u0432\u0435\u0442\u043b\u0430\u044f",
+    "SHOW_PROGRESS": true,
+    "AUTO_SAVE": true
+}
