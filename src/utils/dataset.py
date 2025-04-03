@@ -4,14 +4,19 @@ import torch
 import logging
 from torch.utils.data import Dataset
 from ..preprocessing.audio_processor import AudioProcessor
-from ..configs.config import EMOTION_LABELS
+from ..configs.config import EMOTION_LABELS, SAMPLE_RATE
 
 # Настраиваем логгер
 logger = logging.getLogger(__name__)
 
 class EmotionDataset(Dataset):
-    def __init__(self, data_dir, csv_path):
+    def __init__(self, csv_path, data_dir=None, sample_rate=16000):
+        if data_dir is None:
+            # Если data_dir не указан, используем директорию из пути к CSV
+            data_dir = os.path.dirname(csv_path)
+            
         self.data_dir = data_dir
+        self.sample_rate = sample_rate
         self.audio_processor = AudioProcessor()
         
         try:
@@ -40,12 +45,21 @@ class EmotionDataset(Dataset):
             if not os.path.exists(audio_path):
                 logger.warning(f"Файл не найден: {audio_path}, использую случайный шум")
                 # Создаем случайный шум вместо отсутствующего файла
-                waveform = torch.randn(1, 16000)  # 1 секунда шума при 16 кГц
+                waveform = torch.randn(1, self.sample_rate)  # 1 секунда шума
             else:
                 waveform = self.audio_processor.load_audio(audio_path)
                 
             waveform = self.audio_processor.preprocess_audio(waveform)
             
+            # Проверяем и исправляем размерность для модели
+            # Wav2Vec2 ожидает входные данные формы [batch_size, sequence_length]
+            if len(waveform.shape) == 3 and waveform.shape[0] == 1:
+                # [1, 1, sequence_length] -> [1, sequence_length]
+                waveform = waveform.squeeze(0)
+            elif len(waveform.shape) == 4:
+                # [batch, 1, 1, sequence_length] -> [batch, sequence_length]
+                waveform = waveform.squeeze(1).squeeze(1)
+                
             # Получаем индекс эмоции из словаря
             # Используем прямое сопоставление для нескольких распространенных эмоций
             emotion_map = {label.lower(): i for i, label in enumerate(EMOTION_LABELS)}
@@ -57,7 +71,7 @@ class EmotionDataset(Dataset):
         except Exception as e:
             logger.error(f"Ошибка при получении элемента датасета [{idx}]: {str(e)}")
             # В случае ошибки возвращаем заглушку
-            return torch.randn(1, 16000), 0  # Случайный шум и нейтральная эмоция
+            return torch.randn(1, self.sample_rate), 0  # Случайный шум и нейтральная эмоция
 
 def create_dataset_csv(data_dir, output_path):
     """Создание CSV файла с метками для датасета"""

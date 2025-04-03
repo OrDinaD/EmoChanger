@@ -3,14 +3,15 @@
 block_cipher = None
 
 a = Analysis(
-    ['c:\Users\vladv\Documents\EmoChanger\src\main.py'],
-    pathex=['c:\Users\vladv\Documents\EmoChanger'],
+    ['main.py'],
+    pathex=[],
     binaries=[],
     datas=[
-        ('c:\Users\vladv\Documents\EmoChanger\data', 'data'),
-        ('c:\Users\vladv\Documents\EmoChanger\src\ui\logo.png', '.'),
+        ('data', 'data'),
+        ('src/ui/logo.png', '.'),
+        ('logs', 'logs'),
     ],
-    hiddenimports=['torch', 'torchaudio', 'numpy', 'soundfile'],
+    hiddenimports=['torch', 'torchaudio', 'numpy', 'soundfile', 'PyQt6', 'sys', 'traceback', 'logging'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -23,25 +24,42 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
+app = BUNDLE(
+    exe := EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='EmoChanger',
+        debug=True,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=True,
+        target_arch='arm64',
+        codesign_identity=None,
+        entitlements_file=None,
+        icon='src/ui/logo.png'
+    ),
     a.binaries,
     a.zipfiles,
     a.datas,
-    [],
-    name='EmoChanger',
-    debug=False,
-    bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='c:\Users\vladv\Documents\EmoChanger\src\ui\logo.png'
+    name='EmoChanger.app',
+    icon='src/ui/logo.png',
+    bundle_identifier='com.emochanger.app',
+    info_plist={
+        'NSPrincipalClass': 'NSApplication',
+        'NSAppleScriptEnabled': False,
+        'NSHighResolutionCapable': True,
+        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleDisplayName': 'EmoChanger',
+        'NSRequiresAquaSystemAppearance': False,
+        'LSBackgroundOnly': False,
+        'LSRequiresNativeExecution': True,
+    },
 )

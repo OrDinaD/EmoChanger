@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import logging
+import sys
 from ..configs.config import (
     SAMPLE_RATE, N_FFT, HOP_LENGTH, N_MELS
 )
@@ -17,9 +18,19 @@ WIN_LENGTH = N_FFT
 logger = logging.getLogger(__name__)
 
 class AudioProcessor:
-    def __init__(self):
+    def __init__(self, device=None):
         self.sample_rate = SAMPLE_RATE
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Инициализация устройства с учетом Apple Silicon
+        if device is not None:
+            self.device = device
+        else:
+            if sys.platform == "darwin" and torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        logger.info(f"AudioProcessor использует устройство: {self.device}")
         self._recording_stopped = False
         
     def load_audio(self, file_path):

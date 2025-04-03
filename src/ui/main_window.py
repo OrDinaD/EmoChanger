@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QComboBox, QFileDialog, QMessageBox,
-                             QProgressBar, QSpinBox, QDoubleSpinBox, QDialog)
-from PyQt6.QtCore import Qt, QMimeData, QThread, pyqtSignal, QTimer, QMetaObject, Q_ARG
-from PyQt6 import QtCore
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
+                             QProgressBar, QSpinBox, QDoubleSpinBox, QDialog, QMenuBar,
+                             QMenu)
+from PyQt6.QtCore import Qt, QMimeData, QThread, pyqtSignal, QTimer, QMetaObject, Q_ARG, pyqtSlot
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QAction
 import os
 import torch
 import traceback
@@ -52,21 +52,107 @@ class TrainingThread(QThread):
             logger.error(f"Ошибка при обучении модели: {str(e)}")
             self.error.emit(f"{str(e)}\n{traceback.format_exc()}\nОтчет об ошибке сохранен: {error_report}")
 
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("О приложении")
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(300)
+        
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        
+        # Заголовок
+        title_label = QLabel("EmoChanger")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Авторы
+        authors_label = QLabel("Разработано для 61-й научной конференции БГУИР 2025")
+        authors_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(authors_label)
+        
+        # Разработчики
+        developers_label = QLabel("Авторы: Василевский В.С. и Рында А.В.")
+        developers_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(developers_label)
+        
+        # Разделитель
+        line = QLabel("")
+        line.setStyleSheet("border-top: 1px solid #ccc; margin: 10px 0;")
+        layout.addWidget(line)
+        
+        # Описание
+        description = QLabel(
+            "EmoChanger - это приложение для изменения эмоций в аудиофайлах "
+            "с использованием нейронных сетей. Приложение позволяет загружать "
+            "аудиофайлы, определять текущую эмоцию и изменять её на выбранную пользователем."
+            "\n\nОсновные возможности:\n"
+            "• Загрузка и обработка аудиофайлов\n"
+            "• Запись аудио с микрофона\n"
+            "• Распознавание эмоций в аудио\n"
+            "• Изменение эмоциональной окраски речи\n"
+            "• Обучение на собственных данных"
+        )
+        description.setWordWrap(True)
+        description.setAlignment(Qt.AlignmentFlag.AlignJustify)
+        layout.addWidget(description)
+        
+        # Кнопка Закрыть
+        close_button = QPushButton("Закрыть")
+        close_button.clicked.connect(self.accept)
+        layout.addWidget(close_button)
+
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, device=None):
         super().__init__()
         logger.info("Инициализация главного окна")
         self.setWindowTitle("EmoChanger - Изменение эмоций в аудио")
         self.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         
+        # Создаем меню
+        self.create_menu()
+        
+        # Устанавливаем устройство
+        self.device = device if device is not None else torch.device("cpu")
+        logger.info(f"Используемое устройство: {self.device}")
+        
+        # Проверяем доступность ресурсов
+        logger.info("Проверка доступности ресурсов:")
+        
         # Устанавливаем иконку
         icon_path = os.path.join(os.path.dirname(__file__), "logo.png")
+        logger.info(f"Путь к иконке: {icon_path}")
         if os.path.exists(icon_path):
+            logger.info("Иконка найдена, устанавливаем")
             self.setWindowIcon(QIcon(icon_path))
+        else:
+            logger.warning(f"Иконка не найдена по пути: {icon_path}")
+        
+        # Проверяем наличие директорий данных
+        logger.info(f"Проверка директорий данных:")
+        for dir_path in [DATA_DIR, MODELS_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR]:
+            exists = os.path.isdir(dir_path) 
+            logger.info(f"  - {dir_path}: {'существует' if exists else 'не существует'}")
+            if not exists:
+                try:
+                    os.makedirs(dir_path, exist_ok=True)
+                    logger.info(f"    Создана директория: {dir_path}")
+                except Exception as e:
+                    logger.error(f"    Ошибка при создании директории {dir_path}: {str(e)}")
         
         # Инициализация модели и процессора
-        self.model = None
-        self.audio_processor = AudioProcessor()
+        try:
+            logger.info("Инициализация аудио процессора...")
+            self.audio_processor = AudioProcessor(device=self.device)
+            logger.info("Аудио процессор инициализирован")
+            self.model = None
+            logger.info("Модель будет загружена позже")
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации аудио процессора: {str(e)}", exc_info=True)
+            raise
+        
         self.current_audio = None
         self.current_audio_path = None
         self.recording_thread = None
@@ -164,6 +250,71 @@ class MainWindow(QMainWindow):
         
         logger.info("Главное окно успешно инициализировано")
         
+    def create_menu(self):
+        """Создание строки меню"""
+        menubar = QMenuBar()
+        self.setMenuBar(menubar)
+        
+        # Меню Файл
+        file_menu = QMenu("Файл", self)
+        menubar.addMenu(file_menu)
+        
+        # Действия для меню Файл
+        open_action = QAction("Открыть аудиофайл", self)
+        open_action.triggered.connect(self.open_audio_file)
+        file_menu.addAction(open_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction("Выход", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Меню Модель
+        model_menu = QMenu("Модель", self)
+        menubar.addMenu(model_menu)
+        
+        # Действия для меню Модель
+        download_model_action = QAction("Скачать предобученную модель", self)
+        download_model_action.triggered.connect(self.download_pretrained_model)
+        model_menu.addAction(download_model_action)
+        
+        select_model_action = QAction("Выбрать обученную модель", self)
+        select_model_action.triggered.connect(self.select_model)
+        model_menu.addAction(select_model_action)
+        
+        train_model_action = QAction("Обучить модель", self)
+        train_model_action.triggered.connect(self.train_model)
+        model_menu.addAction(train_model_action)
+        
+        # Меню Настройки
+        settings_menu = QMenu("Настройки", self)
+        menubar.addMenu(settings_menu)
+        
+        # Действия для меню Настройки
+        preferences_action = QAction("Параметры", self)
+        preferences_action.triggered.connect(self.open_settings)
+        settings_menu.addAction(preferences_action)
+        
+        # Меню Справка
+        help_menu = QMenu("Справка", self)
+        menubar.addMenu(help_menu)
+        
+        # Действия для меню Справка
+        about_action = QAction("О приложении", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+        
+    def show_about_dialog(self):
+        """Показывает диалог 'О приложении'"""
+        try:
+            logger.info("Открытие диалога 'О приложении'")
+            dialog = AboutDialog(self)
+            dialog.exec()
+        except Exception as e:
+            logger.error(f"Ошибка при открытии диалога 'О приложении': {str(e)}")
+            QMessageBox.warning(self, "Ошибка", f"Не удалось открыть диалог: {str(e)}")
+
     def apply_theme(self):
         """Применяет базовый стиль к окну"""
         try:
@@ -245,57 +396,136 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Поддерживаются только WAV файлы")
             
     def train_model(self):
+        """Обучение модели на датасете"""
+        # Проверяем наличие директории с данными
         if not os.path.exists(RAW_DATA_DIR):
-            logger.error(f"Папка с датасетом не найдена: {RAW_DATA_DIR}")
-            QMessageBox.warning(self, "Ошибка", "Папка с датасетом не найдена")
+            QMessageBox.warning(
+                self,
+                "Ошибка",
+                f"Директория с данными не найдена: {RAW_DATA_DIR}"
+            )
             return
             
+        # Создаем CSV-файл для датасета
+        csv_path = os.path.join(DATA_DIR, "dataset.csv")
         try:
-            logger.info("Начало обучения модели")
-            # Создаем CSV файл с метками
-            csv_path = os.path.join(DATA_DIR, "dataset.csv")
+            # Показываем прогресс
+            self.statusBar().showMessage("Создание датасета...")
             create_dataset_csv(RAW_DATA_DIR, csv_path)
+        except Exception as e:
+            error_report = create_error_report(e, "Ошибка при создании датасета")
+            logger.error(f"Ошибка при создании датасета: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Ошибка при создании датасета",
+                f"Не удалось создать CSV-файл датасета: {str(e)}\n\n{traceback.format_exc()}"
+            )
+            return
             
-            # Создаем датасет
-            dataset = EmotionDataset(RAW_DATA_DIR, csv_path)
+        # Создаем датасет
+        try:
+            self.statusBar().showMessage("Загрузка данных...")
             
-            # Разделяем на обучающую и валидационную выборки
-            train_size = int((1 - VALIDATION_SPLIT) * len(dataset))
-            val_size = len(dataset) - train_size
-            train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-            
-            # Создаем загрузчики данных
-            train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
-            
-            # Создаем модель
-            self.model = Wav2Vec2EmotionModel()
-            
-            # Создаем и запускаем поток обучения
-            self.training_thread = TrainingThread(
-                self.model,
-                train_loader,
-                val_loader,
-                NUM_EPOCHS,
-                LEARNING_RATE
+            # Создаем экземпляр датасета с правильными параметрами
+            dataset = EmotionDataset(
+                csv_path=csv_path,
+                data_dir=RAW_DATA_DIR,
+                sample_rate=SAMPLE_RATE
             )
             
-            self.training_thread.progress.connect(self.update_training_progress)
-            self.training_thread.finished.connect(self.training_finished)
-            self.training_thread.error.connect(self.training_error)
+            # Показываем информацию о размере датасета
+            logger.info(f"Создан датасет с {len(dataset)} примерами")
+            self.statusBar().showMessage(f"Данные загружены: {len(dataset)} аудиофайлов")
             
-            self.progress_bar.setVisible(SHOW_PROGRESS)
-            self.progress_bar.setRange(0, NUM_EPOCHS)
-            self.progress_bar.setValue(0)
+            # Если датасет пустой, выводим ошибку
+            if len(dataset) == 0:
+                QMessageBox.warning(
+                    self,
+                    "Пустой датасет",
+                    "Датасет не содержит примеров для обучения. Добавьте аудиофайлы в папку data/raw."
+                )
+                return
             
-            self.train_button.setEnabled(False)
-            self.training_thread.start()
+            # Разделяем на обучающую и валидационную выборки
+            val_size = int(len(dataset) * VALIDATION_SPLIT)
+            train_size = len(dataset) - val_size
             
+            train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+            
+            logger.info(f"Разделение данных: обучение - {train_size}, валидация - {val_size}")
+            
+            # Создаем загрузчики данных с обработкой исключений
+            try:
+                train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+                val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
+                logger.info("DataLoader успешно создан")
+            except Exception as e:
+                error_report = create_error_report(e, "Ошибка при создании DataLoader")
+                logger.error(f"Ошибка при создании DataLoader: {str(e)}")
+                QMessageBox.critical(
+                    self,
+                    "Ошибка при подготовке данных",
+                    f"Не удалось создать DataLoader: {str(e)}\n\nПроверьте формат и размер аудиофайлов."
+                )
+                return
+            
+            # Создаем модель
+            try:
+                self.statusBar().showMessage("Инициализация модели...")
+                self.model = Wav2Vec2EmotionModel(num_emotions=NUM_EMOTIONS, device=self.device)
+                logger.info("Модель успешно инициализирована")
+            except Exception as e:
+                error_report = create_error_report(e, "Ошибка при инициализации модели")
+                logger.error(f"Ошибка при инициализации модели: {str(e)}")
+                QMessageBox.critical(
+                    self,
+                    "Ошибка при инициализации модели",
+                    f"Не удалось инициализировать модель: {str(e)}"
+                )
+                return
+            
+            # Запускаем обучение в отдельном потоке
+            try:
+                self.statusBar().showMessage("Запуск обучения...")
+                self.training_thread = TrainingThread(
+                    self.model, train_loader, val_loader, 
+                    epochs=NUM_EPOCHS, learning_rate=LEARNING_RATE
+                )
+                self.training_thread.progress.connect(self.update_training_progress)
+                self.training_thread.finished.connect(self.training_finished)
+                self.training_thread.error.connect(self.training_error)
+                
+                self.training_thread.start()
+                
+                # Обновляем UI
+                self.statusBar().showMessage("Обучение модели...")
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setValue(0)
+                
+                # Блокируем кнопки обучения
+                self.train_button.setEnabled(False)
+                self.fine_tune_button.setEnabled(False)
+                
+                logger.info("Поток обучения успешно запущен")
+            except Exception as e:
+                error_report = create_error_report(e, "Ошибка при запуске потока обучения")
+                logger.error(f"Ошибка при запуске потока обучения: {str(e)}")
+                QMessageBox.critical(
+                    self,
+                    "Ошибка при запуске обучения",
+                    f"Не удалось запустить обучение: {str(e)}"
+                )
+                return
+                
         except Exception as e:
-            error_report = create_error_report(e, "Ошибка при инициализации обучения")
-            logger.error(f"Ошибка при обучении модели: {str(e)}")
-            QMessageBox.warning(self, "Ошибка", f"Ошибка при обучении модели: {str(e)}")
-            
+            error_report = create_error_report(e, "Ошибка при подготовке к обучению")
+            logger.error(f"Ошибка при подготовке к обучению: {str(e)}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Ошибка при подготовке к обучению",
+                f"Не удалось подготовить данные для обучения: {str(e)}\n\n{traceback.format_exc()}"
+            )
+        
     def update_training_progress(self, message):
         self.statusBar().showMessage(message)
         logger.debug(f"Прогресс обучения: {message}")
@@ -314,23 +544,36 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Ошибка", f"Ошибка при обучении: {error_message}")
         
     def select_model(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Выберите модель",
-            MODELS_DIR,
-            "Model Files (*.pth)"
-        )
-        
-        if file_path:
-            try:
-                logger.info(f"Загрузка модели: {file_path}")
-                self.model = Wav2Vec2EmotionModel(model_path=file_path)
-                self.statusBar().showMessage(f"Загружена модель: {os.path.basename(file_path)}")
-                logger.info("Модель успешно загружена")
-            except Exception as e:
-                error_report = create_error_report(e, f"Ошибка при загрузке модели: {file_path}")
-                logger.error(f"Ошибка при загрузке модели: {str(e)}")
-                QMessageBox.warning(self, "Ошибка", f"Ошибка при загрузке модели: {str(e)}")
+        """Выбор предобученной модели"""
+        try:
+            model_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Выберите файл модели",
+                MODELS_DIR,
+                "Модели (*.pth)"
+            )
+            
+            if model_path:
+                logger.info(f"Выбрана модель: {model_path}")
+                self.model = Wav2Vec2EmotionModel(
+                    model_path=model_path,
+                    num_emotions=NUM_EMOTIONS,
+                    device=self.device
+                )
+                self.statusBar().showMessage(f"Модель загружена: {os.path.basename(model_path)}")
+                QMessageBox.information(
+                    self,
+                    "Модель загружена",
+                    f"Модель успешно загружена из файла: {os.path.basename(model_path)}"
+                )
+        except Exception as e:
+            error_report = create_error_report(e, "Ошибка при загрузке модели")
+            logger.error(f"Ошибка при загрузке модели: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Ошибка при загрузке модели",
+                f"Не удалось загрузить модель: {str(e)}\n\n{traceback.format_exc()}\n\nОтчет об ошибке сохранен: {error_report}"
+            )
         
     def open_settings(self):
         """Открывает окно настроек"""
@@ -370,10 +613,14 @@ class MainWindow(QMainWindow):
     def record_audio(self):
         """Запись аудио с микрофона"""
         try:
-            if hasattr(self, 'recording_thread') and self.recording_thread.is_alive():
+            # Проверяем, идет ли запись
+            if hasattr(self, 'recording_thread') and self.recording_thread is not None and hasattr(self.recording_thread, 'is_alive') and self.recording_thread.is_alive():
                 logger.warning("Запись уже идет, останавливаем...")
                 self.audio_processor.stop_recording()
-                self.recording_thread.join(timeout=2)
+                try:
+                    self.recording_thread.join(timeout=2)
+                except Exception as e:
+                    logger.warning(f"Ошибка при остановке потока записи: {str(e)}")
                 self.statusBar().showMessage("Запись остановлена")
                 return
                 
@@ -434,7 +681,7 @@ class MainWindow(QMainWindow):
         QMetaObject.invokeMethod(self, "update_recording_ui_completed_slot", 
                                       Qt.ConnectionType.QueuedConnection)
     
-    @Qt.pyqtSlot()
+    @pyqtSlot()
     def update_recording_ui_completed_slot(self):
         """Слот для обновления UI после записи"""
         self.record_button.setText("Запись аудио с микрофона")
@@ -465,7 +712,7 @@ class MainWindow(QMainWindow):
                                       Qt.ConnectionType.QueuedConnection,
                                       Q_ARG(str, error_msg))
     
-    @Qt.pyqtSlot(str)
+    @pyqtSlot(str)
     def update_recording_ui_error_slot(self, error_msg):
         """Слот для обновления UI при ошибке записи"""
         self.record_button.setText("Запись аудио с микрофона")
@@ -535,11 +782,11 @@ class MainWindow(QMainWindow):
             
     def update_processing_ui_completed(self, output_path):
         """Обновляет UI после успешной обработки"""
-        QtCore.QMetaObject.invokeMethod(self, "update_processing_ui_completed_slot", 
+        QMetaObject.invokeMethod(self, "update_processing_ui_completed_slot", 
                                       Qt.ConnectionType.QueuedConnection,
-                                      QtCore.Q_ARG(str, output_path))
+                                      Q_ARG(str, output_path))
     
-    @QtCore.pyqtSlot(str)
+    @pyqtSlot(str)
     def update_processing_ui_completed_slot(self, output_path):
         """Слот для обновления UI после обработки"""
         self.process_button.setEnabled(True)
@@ -549,11 +796,11 @@ class MainWindow(QMainWindow):
         
     def update_processing_ui_error(self, error_msg):
         """Обновляет UI в случае ошибки при обработке"""
-        QtCore.QMetaObject.invokeMethod(self, "update_processing_ui_error_slot",
+        QMetaObject.invokeMethod(self, "update_processing_ui_error_slot",
                                       Qt.ConnectionType.QueuedConnection,
-                                      QtCore.Q_ARG(str, error_msg))
+                                      Q_ARG(str, error_msg))
     
-    @QtCore.pyqtSlot(str)
+    @pyqtSlot(str)
     def update_processing_ui_error_slot(self, error_msg):
         """Слот для обновления UI при ошибке обработки"""
         self.process_button.setEnabled(True)
@@ -627,49 +874,89 @@ class MainWindow(QMainWindow):
             # Загружаем предобученную модель
             model_path = os.path.join(MODELS_DIR, "pretrained_model.pth")
             if not os.path.exists(model_path):
-                QMessageBox.warning(self, "Ошибка", "Предобученная модель не найдена")
+                QMessageBox.warning(self, "Ошибка", 
+                    "Предобученная модель не найдена. Сначала скачайте предобученную модель.")
+                self.fine_tune_button.setEnabled(True)
                 return
-                
-            self.model = Wav2Vec2EmotionModel(model_path=model_path)
             
             # Создаем CSV файл с метками
             csv_path = os.path.join(DATA_DIR, "dataset.csv")
             create_dataset_csv(RAW_DATA_DIR, csv_path)
             
+            # Загружаем модель
+            try:
+                self.model = Wav2Vec2EmotionModel(
+                    model_path=model_path,
+                    num_emotions=NUM_EMOTIONS,
+                    device=self.device
+                )
+                logger.info("Предобученная модель успешно загружена")
+            except Exception as e:
+                error_report = create_error_report(e, "Ошибка при загрузке модели")
+                logger.error(f"Ошибка при загрузке модели: {str(e)}")
+                QMessageBox.critical(self, "Ошибка", 
+                    f"Ошибка при загрузке модели: {str(e)}")
+                self.fine_tune_button.setEnabled(True)
+                return
+            
             # Создаем датасет
-            dataset = EmotionDataset(RAW_DATA_DIR, csv_path)
-            
-            # Разделяем на обучающую и валидационную выборки
-            train_size = int((1 - VALIDATION_SPLIT) * len(dataset))
-            val_size = len(dataset) - train_size
-            train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-            
-            # Создаем загрузчики данных
-            train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
-            
-            # Создаем и запускаем поток обучения
-            self.training_thread = TrainingThread(
-                self.model,
-                train_loader,
-                val_loader,
-                NUM_EPOCHS,
-                LEARNING_RATE
-            )
-            
-            self.training_thread.progress.connect(self.update_training_progress)
-            self.training_thread.finished.connect(self.training_finished)
-            self.training_thread.error.connect(self.training_error)
-            
-            self.progress_bar.setVisible(SHOW_PROGRESS)
-            self.progress_bar.setRange(0, NUM_EPOCHS)
-            self.progress_bar.setValue(0)
-            
-            self.training_thread.start()
-            
+            try:
+                # Создаем экземпляр датасета с правильными параметрами
+                dataset = EmotionDataset(
+                    csv_path=csv_path,
+                    data_dir=RAW_DATA_DIR,
+                    sample_rate=SAMPLE_RATE
+                )
+                
+                # Если датасет пустой, выводим ошибку
+                if len(dataset) == 0:
+                    QMessageBox.warning(self, "Пустой датасет", 
+                        "Датасет не содержит примеров для обучения. Добавьте аудиофайлы в папку data/raw.")
+                    self.fine_tune_button.setEnabled(True)
+                    return
+                
+                # Разделяем на обучающую и валидационную выборки
+                val_size = int(len(dataset) * VALIDATION_SPLIT)
+                train_size = len(dataset) - val_size
+                train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+                
+                # Создаем загрузчики данных
+                train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+                val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
+                
+                # Запускаем дообучение в отдельном потоке
+                self.training_thread = TrainingThread(
+                    self.model,
+                    train_loader,
+                    val_loader,
+                    NUM_EPOCHS,
+                    LEARNING_RATE * 0.1  # Используем меньший learning rate для дообучения
+                )
+                
+                self.training_thread.progress.connect(self.update_training_progress)
+                self.training_thread.finished.connect(self.training_finished)
+                self.training_thread.error.connect(self.training_error)
+                
+                self.progress_bar.setVisible(SHOW_PROGRESS)
+                self.progress_bar.setRange(0, NUM_EPOCHS)
+                self.progress_bar.setValue(0)
+                
+                # Блокируем кнопки обучения
+                self.train_button.setEnabled(False)
+                
+                self.training_thread.start()
+                self.statusBar().showMessage("Дообучение модели...")
+                
+            except Exception as e:
+                error_report = create_error_report(e, "Ошибка при дообучении модели")
+                logger.error(f"Ошибка при дообучении модели: {str(e)}", exc_info=True)
+                QMessageBox.critical(self, "Ошибка", 
+                    f"Ошибка при дообучении модели: {str(e)}")
+                self.fine_tune_button.setEnabled(True)
+                
         except Exception as e:
-            error_report = create_error_report(e, "Ошибка при дообучении модели")
-            logger.error(f"Ошибка при дообучении модели: {str(e)}")
-            QMessageBox.warning(self, "Ошибка", f"Ошибка при дообучении модели: {str(e)}")
-        finally:
+            error_report = create_error_report(e, "Общая ошибка при дообучении")
+            logger.error(f"Общая ошибка при дообучении: {str(e)}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка", 
+                f"Ошибка при дообучении модели: {str(e)}")
             self.fine_tune_button.setEnabled(True) 

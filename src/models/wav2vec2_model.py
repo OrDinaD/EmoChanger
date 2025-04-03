@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import os
+import sys
 from tqdm import tqdm
 import numpy as np
 import logging
@@ -28,15 +29,21 @@ class EmotionClassificationHead(nn.Module):
         return x
 
 class Wav2Vec2EmotionModel(nn.Module):
-    def __init__(self, model_path=None, num_emotions=5):
+    def __init__(self, model_path=None, num_emotions=5, device=None):
         super().__init__()
-        # Проверяем доступность CUDA
-        if torch.cuda.is_available():
+        # Проверяем доступность устройств
+        if device is not None:
+            self.device = device
+            logger.info(f"Используется указанное устройство: {self.device}")
+        elif sys.platform == "darwin" and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            logger.info(f"Используется Apple Silicon MPS: {self.device}")
+        elif torch.cuda.is_available():
             self.device = torch.device("cuda")
             logger.info(f"Используется GPU: {torch.cuda.get_device_name(0)}")
         else:
             self.device = torch.device("cpu")
-            logger.warning("CUDA недоступна, используется CPU")
+            logger.warning("Аппаратное ускорение недоступно, используется CPU")
             
         self.num_emotions = num_emotions
         
@@ -65,16 +72,33 @@ class Wav2Vec2EmotionModel(nn.Module):
         self.to(self.device)
         
     def forward(self, input_values):
-        # Получаем признаки из Wav2Vec2
-        outputs = self.wav2vec2(input_values, output_hidden_states=True)
-        hidden_states = outputs.hidden_states[-1]
-        
-        # Усредняем по временной оси
-        pooled_output = torch.mean(hidden_states, dim=1)
-        
-        # Классифицируем эмоции
-        emotion_logits = self.emotion_classifier(pooled_output)
-        return emotion_logits
+        try:
+            # Проверяем и приводим размерность входных данных
+            if input_values.dim() == 4:  # [batch, 1, 1, seq_len]
+                input_values = input_values.squeeze(1).squeeze(1)
+            elif input_values.dim() == 3 and input_values.size(1) == 1:  # [batch, 1, seq_len]
+                input_values = input_values.squeeze(1)
+            elif input_values.dim() == 2 and input_values.size(0) == 1:  # [1, seq_len]
+                # Добавляем фиктивный batch dimension если его нет, но данные одного примера
+                input_values = input_values.unsqueeze(0)
+                
+            # Логируем информацию о размерности
+            logger.debug(f"Размерность входных данных после коррекции: {input_values.shape}")
+                
+            # Получаем признаки из Wav2Vec2
+            outputs = self.wav2vec2(input_values, output_hidden_states=True)
+            hidden_states = outputs.hidden_states[-1]
+            
+            # Усредняем по временной оси
+            pooled_output = torch.mean(hidden_states, dim=1)
+            
+            # Классифицируем эмоции
+            emotion_logits = self.emotion_classifier(pooled_output)
+            return emotion_logits
+        except Exception as e:
+            logger.error(f"Ошибка в forward pass модели: {str(e)}")
+            logger.error(f"Исходная размерность входных данных: {input_values.shape}")
+            raise
         
     def load_model(self, model_path):
         """Загрузка обученной модели"""
