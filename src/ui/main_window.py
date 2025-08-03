@@ -74,7 +74,9 @@ class MainWindow(QMainWindow):
         # Таймер для автосохранения
         self.auto_save_timer = QTimer()
         self.auto_save_timer.timeout.connect(self.auto_save_model)
-        self.auto_save_timer.start(300000)  # каждые 5 минут
+        # Интервал автосохранения задается в секундах в конфигурации
+        # QTimer принимает значение в миллисекундах
+        self.auto_save_timer.start(AUTO_SAVE_INTERVAL * 1000)
         
         # Создаем центральный виджет
         central_widget = QWidget()
