@@ -174,26 +174,31 @@ class MainWindow(QMainWindow):
         
         # Кнопка скачивания предобученной модели
         self.download_model_button = QPushButton("Скачать предобученную модель")
+        self.download_model_button.setObjectName("download_model_button")
         self.download_model_button.clicked.connect(self.download_pretrained_model)
         top_panel.addWidget(self.download_model_button)
         
         # Кнопка дообучения модели
         self.fine_tune_button = QPushButton("Дообучить модель")
+        self.fine_tune_button.setObjectName("fine_tune_button")
         self.fine_tune_button.clicked.connect(self.fine_tune_model)
         top_panel.addWidget(self.fine_tune_button)
         
         # Кнопка обучения модели
         self.train_button = QPushButton("Обучить модель на датасете")
+        self.train_button.setObjectName("train_button")
         self.train_button.clicked.connect(self.train_model)
         top_panel.addWidget(self.train_button)
         
         # Кнопка выбора модели
         self.select_model_button = QPushButton("Выбрать обученную модель")
+        self.select_model_button.setObjectName("select_model_button")
         self.select_model_button.clicked.connect(self.select_model)
         top_panel.addWidget(self.select_model_button)
         
         # Кнопка настроек
         self.settings_button = QPushButton("Настройки")
+        self.settings_button.setObjectName("settings_button")
         self.settings_button.clicked.connect(self.open_settings)
         top_panel.addWidget(self.settings_button)
         
@@ -201,25 +206,20 @@ class MainWindow(QMainWindow):
         
         # Создаем область для drag & drop
         self.drop_area = QLabel("Перетащите аудиофайл сюда или нажмите кнопку ниже")
+        self.drop_area.setObjectName("drop_area")
         self.drop_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drop_area.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 5px;
-                padding: 20px;
-                background: #f0f0f0;
-            }
-        """)
         self.drop_area.setAcceptDrops(True)
         main_layout.addWidget(self.drop_area)
         
         # Кнопка для открытия файла
         self.open_file_button = QPushButton("Открыть аудиосообщение")
+        self.open_file_button.setObjectName("open_file_button")
         self.open_file_button.clicked.connect(self.open_audio_file)
         main_layout.addWidget(self.open_file_button)
         
         # Кнопка записи с микрофона
         self.record_button = QPushButton("Запись аудио с микрофона")
+        self.record_button.setObjectName("record_button")
         self.record_button.clicked.connect(self.record_audio)
         main_layout.addWidget(self.record_button)
         
@@ -227,6 +227,7 @@ class MainWindow(QMainWindow):
         emotion_layout = QHBoxLayout()
         emotion_label = QLabel("Выберите эмоцию:")
         self.emotion_combo = QComboBox()
+        self.emotion_combo.setObjectName("emotion_combo")
         self.emotion_combo.addItems(list(EMOTIONS.keys()))
         emotion_layout.addWidget(emotion_label)
         emotion_layout.addWidget(self.emotion_combo)
@@ -234,11 +235,13 @@ class MainWindow(QMainWindow):
         
         # Кнопка обработки
         self.process_button = QPushButton("Обработать")
+        self.process_button.setObjectName("process_button")
         self.process_button.clicked.connect(self.process_audio)
         main_layout.addWidget(self.process_button)
         
         # Прогресс-бар
         self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("progress_bar")
         self.progress_bar.setVisible(SHOW_PROGRESS)
         main_layout.addWidget(self.progress_bar)
         
