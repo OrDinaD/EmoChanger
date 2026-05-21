@@ -1,100 +1,102 @@
-# EmoChanger
+# 🎭 EmoChanger
 
-EmoChanger - это приложение для изменения эмоций в аудиофайлах с использованием нейронных сетей. Приложение позволяет загружать аудиофайлы, определять текущую эмоцию и изменять её на выбранную пользователем.
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#)
 
-## Возможности
+**EmoChanger** is a powerful, AI-driven application designed to analyze and transform emotional states in audio files. Leveraging state-of-the-art **Wav2Vec2** models, it provides seamless emotion recognition and conversion for researchers, developers, and creative professionals.
 
-- Загрузка аудиофайлов (WAV формат)
-- Запись аудио с микрофона
-- Определение текущей эмоции в аудио
-- Изменение эмоции на выбранную пользователем
-- Обучение модели на собственном датасете
-- Сохранение и загрузка обученных моделей
-- Поддержка Mac с чипом Apple Silicon (M1/M2/M3)
+[English](#english) | [Русский](#русский)
 
-## Установка
+---
 
-1. Клонируйте репозиторий:
-```bash
-git clone https://github.com/yourusername/EmoChanger.git
-cd EmoChanger
-```
+<a name="english"></a>
+## 🚀 Features
 
-2. Создайте виртуальное окружение и активируйте его:
-```bash
-python -m venv venv
-source venv/bin/activate  # для Linux/Mac
-venv\Scripts\activate     # для Windows
-```
+- **🎯 Precision Recognition:** Automatically detect emotions (Neutral, Happy, Sad, Angry, Fear) in any WAV audio.
+- **🎙️ Real-time Recording:** Capture audio directly from your microphone for instant analysis.
+- **🧠 Custom Training:** Train the underlying model on your own datasets to improve accuracy for specific voices or languages.
+- **⚡ Apple Silicon Optimized:** Full support for Apple M1/M2/M3 chips via MPS acceleration.
+- **🖥️ Modern UI:** Intuitive interface built with PyQt6 for a smooth user experience.
 
-3. Установите зависимости:
-```bash
-pip install -r requirements.txt
-```
+## 📸 Screenshots
 
-## Структура проекта
+| Main Interface | About the Project |
+|:---:|:---:|
+| ![Main Window](assets/screenshots/main_window.png) | ![About Dialog](assets/screenshots/about_dialog.png) |
 
-```
-EmoChanger/
-├── configs/
-│   └── config.py           # Конфигурация проекта
-├── data/
-│   ├── raw/               # Исходные аудиофайлы
-│   ├── processed/         # Обработанные аудиофайлы
-│   └── models/           # Сохраненные модели
-├── src/
-│   ├── models/
-│   │   └── wav2vec2_model.py
-│   ├── preprocessing/
-│   │   └── audio_processor.py
-│   ├── ui/
-│   │   └── main_window.py
-│   └── utils/
-│       └── dataset.py
-├── requirements.txt
-└── README.md
-```
+## 📊 Performance & Metrics
 
-## Использование
+Our models achieve high convergence rates. Below is a typical training performance visualization:
 
-1. Запустите приложение:
-```bash
-python main.py
-```
+![Training Metrics](assets/metrics/training_performance.png)
 
-2. Для обучения модели:
-   - Поместите аудиофайлы в папку `data/raw/`
-   - Имена файлов должны иметь формат: `emotion_filename.wav` (например, `радость_sample1.wav`)
-   - Нажмите кнопку "Обучить модель на датасете"
+## 🛠️ Quick Start
 
-3. Для изменения эмоции в аудио:
-   - Загрузите аудиофайл или запишите с микрофона
-   - Выберите целевую эмоцию из выпадающего списка
-   - Нажмите кнопку "Обработать"
-
-## Поддерживаемые эмоции
-
-- Радость
-- Страх
-- Удивление
-- Грусть
-- Гнев
-
-## Требования
-
+### Prerequisites
 - Python 3.8+
-- Для Windows/Linux: CUDA (опционально, для ускорения на GPU)
-- Для Mac: Apple Silicon MPS (поддерживается автоматически на M1/M2/M3)
-- Микрофон (для записи аудио)
+- macOS (Apple Silicon recommended), Linux, or Windows.
 
-## Сборка приложения
+### Installation
 
-### Для Mac с Apple Silicon:
-```bash
-pyinstaller EmoChanger.spec
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/OrDinaD/EmoChanger.git
+   cd EmoChanger
+   ```
+
+2. **Set up the environment (macOS/Linux):**
+   ```bash
+   chmod +x setup_mac.sh
+   ./setup_mac.sh
+   ```
+
+3. **Run the application:**
+   ```bash
+   source venv/bin/activate
+   python main.py
+   ```
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    A[Audio Input] --> B[Preprocessing]
+    B --> C{Wav2Vec2 Model}
+    C --> D[Emotion Classifier]
+    D --> E[Output: Emotion Label]
+    C --> F[Emotion Transformation]
+    F --> G[Modified Audio]
 ```
-Готовое приложение будет находиться в директории `dist`.
 
-## Лицензия
+---
 
-MIT License 
+<a name="русский"></a>
+## 🚀 Возможности (Русский)
+
+- **🎯 Точное распознавание:** Автоматическое определение эмоций (Нейтральный, Радостный, Грустный, Злой, Испуганный).
+- **🎙️ Запись в реальном времени:** Запись аудио прямо с микрофона.
+- **🧠 Обучение:** Возможность дообучения модели на ваших собственных данных.
+- **⚡ Оптимизация для Mac:** Полная поддержка чипов Apple M1/M2/M3.
+
+## 🛠️ Быстрый запуск
+
+1. **Клонируйте и установите зависимости:**
+   ```bash
+   ./setup_mac.sh
+   ```
+
+2. **Запустите приложение:**
+   ```bash
+   source venv/bin/activate
+   python main.py
+   ```
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+*Developed for the 61st Scientific Conference of BSUIR 2025.*
+*Authors: Vasilevsky V.S. and Rynda A.V.*

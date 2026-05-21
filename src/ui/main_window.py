@@ -316,49 +316,125 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", f"Не удалось открыть диалог: {str(e)}")
 
     def apply_theme(self):
-        """Применяет базовый стиль к окну"""
+        """Применяет современную фиолетовую тему к окну"""
         try:
-            logger.debug(f"Применение базового стиля")
-            # Применяем простой стиль без ссылки на темы
+            logger.debug(f"Применение фиолетовой темы")
             self.setStyleSheet("""
                 QMainWindow, QDialog {
-                    background-color: #f5f5f5;
-                    color: #333333;
+                    background-color: #121212;
+                    color: #E0E0E0;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                }
+                
+                QLabel {
+                    color: #E0E0E0;
                 }
                 
                 QPushButton {
-                    background-color: #e0e0e0;
-                    color: #333333;
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    min-height: 20px;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #9D50BB, stop:1 #6E48AA);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    font-size: 13px;
                 }
                 
                 QPushButton:hover {
-                    background-color: #d0d0d0;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #B162CF, stop:1 #825BBF);
                 }
                 
-                QComboBox, QSpinBox, QDoubleSpinBox {
-                    background-color: #ffffff;
-                    color: #333333;
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
-                    padding: 3px;
-                    min-height: 20px;
+                QPushButton:pressed {
+                    background: #5E338A;
+                }
+                
+                QPushButton:disabled {
+                    background: #333333;
+                    color: #888888;
+                }
+                
+                QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
+                    background-color: #1E1E1E;
+                    color: #FFFFFF;
+                    border: 2px solid #3D3D3D;
+                    border-radius: 6px;
+                    padding: 5px;
+                    selection-background-color: #9D50BB;
+                }
+                
+                QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus {
+                    border: 2px solid #9D50BB;
                 }
                 
                 QProgressBar {
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
+                    border: 1px solid #3D3D3D;
+                    border-radius: 5px;
                     text-align: center;
+                    background-color: #1E1E1E;
+                    color: white;
                 }
                 
                 QProgressBar::chunk {
-                    background-color: #6B4EAE;
+                    background-color: #9D50BB;
+                    width: 10px;
+                }
+                
+                QGroupBox {
+                    border: 2px solid #3D3D3D;
+                    border-radius: 10px;
+                    margin-top: 15px;
+                    font-weight: bold;
+                    color: #9D50BB;
+                }
+                
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 3px 0 3px;
+                }
+                
+                QScrollBar:vertical {
+                    border: none;
+                    background: #121212;
+                    width: 10px;
+                    margin: 0px 0px 0px 0px;
+                }
+                
+                QScrollBar::handle:vertical {
+                    background: #3D3D3D;
+                    min-height: 20px;
+                    border-radius: 5px;
+                }
+                
+                QScrollBar::handle:vertical:hover {
+                    background: #9D50BB;
+                }
+                
+                QStatusBar {
+                    background: #1E1E1E;
+                    color: #9D50BB;
+                }
+                
+                QMenuBar {
+                    background-color: #1E1E1E;
+                    color: #E0E0E0;
+                }
+                
+                QMenuBar::item:selected {
+                    background-color: #9D50BB;
+                }
+                
+                QMenu {
+                    background-color: #1E1E1E;
+                    color: #E0E0E0;
+                    border: 1px solid #3D3D3D;
+                }
+                
+                QMenu::item:selected {
+                    background-color: #9D50BB;
                 }
             """)
-            logger.debug("Базовый стиль успешно применен")
+            logger.debug("Фиолетовая тема успешно применена")
         except Exception as e:
             error_report = create_error_report(e, "Ошибка при применении стиля")
             logger.error(f"Ошибка при применении стиля: {str(e)}")

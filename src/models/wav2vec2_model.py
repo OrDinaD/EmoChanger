@@ -1,6 +1,6 @@
 import torch
 import torchaudio
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Tokenizer, Wav2Vec2Config
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Config, Wav2Vec2FeatureExtractor
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
